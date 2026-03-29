@@ -1,5 +1,7 @@
 # zsh-dotnet-completion
 
+[![CI](https://github.com/MenkeTechnologies/zsh-dotnet-completion/actions/workflows/ci.yml/badge.svg)](https://github.com/MenkeTechnologies/zsh-dotnet-completion/actions/workflows/ci.yml)
+
 Dotnet tab completion
 
 Aliases
