@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="zsh-dotnet-completion — Engineering report. Tab completion for the dotnet CLI via the official `dotnet complete` self-hosted completer + 3 aliases + PATH guard. 15 LOC, 39 zunit @test cases across 7 contract/syntax/alias files, 21 structural gates.">
+  <title>zsh-dotnet-completion &mdash; Engineering Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="hud-static.css">
+  <link rel="stylesheet" href="tutorial.css">
+  <style>
+    .tutorial-main { max-width: 76rem; }
+
+    .file-table { width:100%;border-collapse:collapse;margin:0.6rem 0;font-size:12px; }
+    .file-table th { background:var(--bg-secondary);color:var(--cyan);font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;text-align:left;padding:7px 10px;border:1px solid var(--border); }
+    .file-table td { padding:6px 10px;border:1px solid var(--border);color:var(--text-dim);vertical-align:middle; }
+    .file-table tr:hover td { background:var(--bg-hover); }
+    .file-table td:first-child { font-family:'Share Tech Mono',monospace;color:var(--accent-light);font-weight:600;white-space:nowrap; }
+    .file-table .num { text-align:right;font-family:'Share Tech Mono',monospace; }
+    .file-table .total-row td { background:var(--bg-secondary);font-weight:700;color:var(--text);border-top:2px solid var(--cyan); }
+    .file-table code { font-size:11px;color:var(--accent-light);background:var(--bg-primary);padding:1px 4px;border-radius:2px; }
+
+    .stat-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.75rem;margin:1.2rem 0; }
+    .stat-card { border:1px solid var(--border);border-top:3px solid var(--cyan);background:var(--bg-card);padding:1rem 1.2rem;border-radius:2px;text-align:center; }
+    .stat-card .stat-val { font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;color:var(--cyan);line-height:1.1;text-shadow:0 0 20px var(--cyan-glow); }
+    .stat-card .stat-val.accent { color:var(--accent);text-shadow:0 0 20px var(--accent-glow); }
+    .stat-card .stat-val.green  { color:var(--green);text-shadow:0 0 20px rgba(57,255,20,.3); }
+    .stat-card .stat-label { font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);margin-top:0.5rem; }
+    @keyframes glow-pulse { 0%,100%{text-shadow:0 0 20px var(--cyan-glow)}50%{text-shadow:0 0 40px var(--cyan-glow),0 0 80px var(--cyan-dim)} }
+    .stat-card .stat-val { animation:glow-pulse 3s ease-in-out infinite; }
+
+    .section-rule { border:none;border-top:1px dashed var(--border);margin:2rem 0; }
+
+    .feature-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(22rem,1fr));gap:0.65rem;margin:0.8rem 0; }
+    .feature-card { border:1px solid var(--border);border-left:3px solid var(--cyan);background:var(--bg-card);padding:0.7rem 1rem;border-radius:2px; }
+    .feature-card h4 { font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);margin:0 0 0.3rem; }
+    .feature-card p { margin:0;font-size:11px;color:var(--text-dim);line-height:1.55; }
+    .feature-card code { font-size:10.5px;color:var(--accent-light);background:var(--bg-primary);padding:1px 4px;border-radius:2px; }
+    .feature-card ul { margin:0.3rem 0 0;padding-left:1.2rem;font-size:11px;color:var(--text-dim);line-height:1.6; }
+    .feature-card li code { font-size:10px; }
+  </style>
+</head>
+<body>
+  <div class="app tutorial-app" id="reportApp">
+    <div class="crt-scanline" id="crtH" aria-hidden="true"></div>
+    <div class="crt-scanline-v" id="crtV" aria-hidden="true"></div>
+
+    <header class="tutorial-header">
+      <div class="tutorial-header-inner">
+        <div>
+          <h1 class="tutorial-brand">// ZSH-DOTNET-COMPLETION &mdash; ENGINEERING REPORT</h1>
+          <nav class="tutorial-crumbs" aria-label="Breadcrumb">
+            <span class="current">Engineering Report</span>
+            <span class="sep">/</span>
+            <a href="index.html">Docs</a>
+            <span class="sep">/</span>
+            <a href="https://github.com/MenkeTechnologies/zsh-dotnet-completion" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <span class="sep">/</span>
+            <a href="https://github.com/MenkeTechnologies/MenkeTechnologiesMeta" target="_blank" rel="noopener noreferrer">Meta</a>
+          </nav>
+          <p style="margin:0.35rem 0 0;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-dim);letter-spacing:0.03em;opacity:0.75;">
+            <code>dotnet complete</code> self-hosted completer &middot; <code>compctl -K</code> legacy binding &middot; guarded <code>$HOME/.dotnet/tools</code> PATH append &middot; 3 aliases (<code>dt</code> / <code>dr</code> / <code>dcl</code>)
+          </p>
+        </div>
+        <div class="tutorial-toolbar">
+          <button type="button" class="btn btn-secondary" id="btnTheme" title="Toggle light/dark">Theme</button>
+          <button type="button" class="btn btn-secondary active" id="btnCrt" title="CRT scanline overlay">CRT</button>
+          <button type="button" class="btn btn-secondary active" id="btnNeon" title="Neon border pulse">Neon</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="tutorial-main">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SECTION 1: EXECUTIVE SUMMARY           -->
+      <!-- ═══════════════════════════════════════ -->
+      <h2 class="tutorial-title"><span class="step-hash">&gt;_</span>EXECUTIVE SUMMARY</h2>
+      <p class="tutorial-subtitle">zsh-dotnet-completion is a 15-line zsh plugin that wires the official <code>dotnet complete</code> self-hosted completer into zsh's legacy <code>compctl</code> completion system. Microsoft ships completion logic inside the dotnet SDK itself &mdash; <code>dotnet complete "$words"</code> returns the candidate list given the current command line, so the plugin's only job is to bridge that output into zsh's <code>reply</code> array. Because the SDK owns the completion table, every new dotnet release (new subcommands, new template names, new package sources) shows up the moment <code>dotnet --version</code> bumps &mdash; no plugin update needed. The plugin also conditionally appends <code>$HOME/.dotnet/tools</code> to <code>$PATH</code> (guarded by <code>[[ -d ... ]]</code> so it's a no-op on hosts without the dotnet SDK installed), and registers three aliases (<code>dt</code>=test, <code>dr</code>=run, <code>dcl</code>=clean) that match Microsoft's documented developer-workflow shortcuts. <strong>Smallest plugin in the family by source size, largest test-to-source ratio: 39 zunit @test cases / 15 LOC = 2.6 tests per line.</strong></p>
+
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-val">15</div><div class="stat-label">Plugin LOC</div></div>
+        <div class="stat-card"><div class="stat-val">3</div><div class="stat-label">Aliases (<code>dt</code>/<code>dr</code>/<code>dcl</code>)</div></div>
+        <div class="stat-card"><div class="stat-val accent">39</div><div class="stat-label">zunit @test Cases</div></div>
+        <div class="stat-card"><div class="stat-val green">21</div><div class="stat-label">Structural Gates (.sh)</div></div>
+        <div class="stat-card"><div class="stat-val">7</div><div class="stat-label">zunit Files</div></div>
+        <div class="stat-card"><div class="stat-val">23</div><div class="stat-label">Git Commits</div></div>
+      </div>
+
+      <hr class="section-rule">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SECTION 2: ARCHITECTURE                 -->
+      <!-- ═══════════════════════════════════════ -->
+      <h2 class="tutorial-title"><span class="step-hash">~</span>ARCHITECTURE &middot; FILE STRUCTURE</h2>
+      <p class="tutorial-subtitle">One file. Four distinct surfaces in 15 lines: PATH augmentation (guarded), callback function, alias registration, <code>compctl</code> binding.</p>
+
+      <table class="file-table">
+        <thead>
+          <tr>
+            <th>Path</th>
+            <th class="num">Lines</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>zsh-dotnet-completion.plugin.zsh</td><td class="num">15</td><td>The whole plugin &mdash; <code>[[ -d $HOME/.dotnet/tools ]]</code> guard + <code>export PATH=...</code>; <code>_dotnet_zsh_complete()</code> function calling <code>dotnet complete "$words"</code>; aliases <code>dt</code> / <code>dcl</code> / <code>dr</code>; <code>compctl -K _dotnet_zsh_complete dotnet</code> binding</td></tr>
+          <tr><td>src/</td><td class="num">0</td><td>No <code>#compdef</code> file &mdash; this plugin uses zsh's legacy <code>compctl</code> system, not the modern <code>compsys</code> <code>_arguments</code> framework. Microsoft's official completer drives candidate selection, so a static <code>_arguments</code> table would only duplicate (and drift from) the SDK</td></tr>
+          <tr class="total-row"><td>Total source</td><td class="num">15</td><td>One file, no completion-system <code>#compdef</code> file</td></tr>
+        </tbody>
+      </table>
+
+      <hr class="section-rule">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SECTION 3: COMPLETION COVERAGE          -->
+      <!-- ═══════════════════════════════════════ -->
+      <h2 class="tutorial-title"><span class="step-hash">@</span>COMPLETION COVERAGE</h2>
+      <p class="tutorial-subtitle">Microsoft owns the completion table; the plugin is the bridge. Whatever <code>dotnet complete</code> returns shows up in the menu, line-split on <code>\n</code>.</p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h4>Subcommand completion (live)</h4>
+          <p>Top-level subcommands &mdash; <code>new</code>, <code>build</code>, <code>run</code>, <code>test</code>, <code>restore</code>, <code>add</code>, <code>remove</code>, <code>publish</code>, <code>pack</code>, <code>clean</code>, <code>nuget</code>, <code>workload</code>, <code>tool</code>, etc. &mdash; come straight from <code>dotnet complete "$words"</code>. New SDK adds a subcommand: it works immediately, no plugin bump.</p>
+        </div>
+        <div class="feature-card">
+          <h4>Template completion</h4>
+          <p><code>dotnet new &lt;TAB&gt;</code> lists every template the SDK knows about (<code>console</code>, <code>classlib</code>, <code>web</code>, <code>webapi</code>, <code>blazor</code>, <code>maui</code>, custom templates installed via <code>dotnet new install</code>, etc.). The SDK queries its template engine; this plugin just forwards the result.</p>
+        </div>
+        <div class="feature-card">
+          <h4>Package completion</h4>
+          <p><code>dotnet add package &lt;TAB&gt;</code> &mdash; the SDK's completer queries configured NuGet sources. Plugin doesn't talk to NuGet directly, so private feeds (configured via <code>~/.nuget/NuGet/NuGet.Config</code>) Just Work without per-feed plumbing.</p>
+        </div>
+        <div class="feature-card">
+          <h4>Flag &amp; configuration completion</h4>
+          <p><code>dotnet build -c &lt;TAB&gt;</code> &rarr; <code>Debug</code> / <code>Release</code>. <code>dotnet test --framework &lt;TAB&gt;</code> &rarr; <code>net6.0</code> / <code>net8.0</code> / etc. &mdash; the SDK's completer reads the actual <code>.csproj</code> / <code>global.json</code> in the current directory, so completion is project-aware, not generic.</p>
+        </div>
+        <div class="feature-card">
+          <h4>Aliases (3)</h4>
+          <p>Workflow shortcuts matching Microsoft's documented developer flow:</p>
+          <ul>
+            <li><code>dt</code> &rarr; <code>dotnet test</code></li>
+            <li><code>dr</code> &rarr; <code>dotnet run</code></li>
+            <li><code>dcl</code> &rarr; <code>dotnet clean</code></li>
+          </ul>
+        </div>
+        <div class="feature-card">
+          <h4>PATH augmentation</h4>
+          <p><code>$HOME/.dotnet/tools</code> is where <code>dotnet tool install --global ...</code> drops binaries. The plugin appends (not prepends) it to <code>$PATH</code> only if the directory exists &mdash; silent no-op on hosts without dotnet, never shadows <code>/usr/local/bin</code> on hosts with it.</p>
+        </div>
+      </div>
+
+      <hr class="section-rule">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SECTION 4: TEST COVERAGE                -->
+      <!-- ═══════════════════════════════════════ -->
+      <h2 class="tutorial-title"><span class="step-hash">#</span>TEST COVERAGE</h2>
+      <p class="tutorial-subtitle">39 zunit <code>@test</code> cases across 7 files, plus 21 structural shell gates from the umbrella. Test-to-source ratio is the highest in the family (2.6 tests per LOC) precisely because the plugin's surface is small enough to enumerate every contract.</p>
+
+      <table class="file-table">
+        <thead>
+          <tr>
+            <th>Test file</th>
+            <th class="num">@test count</th>
+            <th>What it pins</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>tests/t-plugin.zsh</td><td class="num">16</td><td>Full plugin contract &mdash; <code>$HOME/.dotnet/tools</code> guard, PATH append (NOT prepend) order, callback fn defined, callback delegates to <code>dotnet complete "$words"</code> (the official tool), <code>reply</code> assigned via parameter-expansion split, <code>compctl -K _dotnet_zsh_complete dotnet</code> binding</td></tr>
+          <tr><td>tests/t-contract.zsh</td><td class="num">3</td><td>Entrypoint stem matches plugin-dir basename (Zinit / OMZ source-line copy-paste pin)</td></tr>
+          <tr><td>tests/t-contract2.zsh</td><td class="num">5</td><td>Idempotency under repeated source (alias count stays at 3)</td></tr>
+          <tr><td>tests/t-contract3.zsh</td><td class="num">5</td><td>Each alias body matches exactly its documented expansion</td></tr>
+          <tr><td>tests/t-contract4.zsh</td><td class="num">5</td><td>No accidental global-scope side effects beyond PATH + aliases + compctl</td></tr>
+          <tr><td>tests/t-aliases.zsh</td><td class="num">4</td><td>3 aliases register, each resolves to the right <code>dotnet</code> subcommand</td></tr>
+          <tr><td>tests/t-syntax.zsh</td><td class="num">1</td><td><code>zsh -n</code> parse-cleanness on entrypoint</td></tr>
+          <tr class="total-row"><td>Total</td><td class="num">39</td><td>7 zunit files</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-family:'Orbitron',sans-serif;font-size:13px;letter-spacing:1.5px;color:var(--cyan);margin-top:1.5rem;">// STRUCTURAL GATES (21 shell scripts)</h3>
+      <p style="font-size:11.5px;color:var(--text-dim);line-height:1.6;">Same 21-script gate-set the rest of the meta family enforces. Categories:</p>
+      <ul style="font-size:11px;color:var(--text-dim);line-height:1.6;">
+        <li><strong>docs/*.html gates (9):</strong> h1 present, body+html closing, final newline, no deprecated tags, https-only, no inline event handlers (Tauri-CSP-safe), no placeholder hash hrefs, <code>target=_blank rel=noopener</code></li>
+        <li><strong>README.md gates (4):</strong> final newline, badges present, h2 sections, https links</li>
+        <li><strong>man-page gates (3):</strong> final newline, no trailing whitespace, synopsis section</li>
+        <li><strong>tests/ gates (2):</strong> shell scripts executable, shebang present</li>
+        <li><strong>.github/workflows/ gates (2):</strong> final newline, no tabs</li>
+        <li><strong>cargo gate (1):</strong> vacuously passes &mdash; no Cargo.toml</li>
+      </ul>
+
+      <hr class="section-rule">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SECTION 5: KEY DESIGN DECISIONS         -->
+      <!-- ═══════════════════════════════════════ -->
+      <h2 class="tutorial-title"><span class="step-hash">?</span>KEY DESIGN DECISIONS</h2>
+      <p class="tutorial-subtitle">Five tradeoffs in 15 lines of code.</p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h4>Delegate to <code>dotnet complete</code></h4>
+          <p>The alternative is hand-authoring an <code>_arguments</code> spec table covering every dotnet subcommand, flag, template, and framework target &mdash; thousands of entries that rot the moment Microsoft ships a new SDK. <code>dotnet complete "$words"</code> is the SDK's own completer; the plugin gets free maintenance on every <code>dotnet</code> update.</p>
+        </div>
+        <div class="feature-card">
+          <h4><code>compctl</code>, not <code>compdef</code></h4>
+          <p>Most modern zsh plugins use the compsys framework (<code>#compdef</code> + <code>_arguments</code>). This plugin uses the legacy <code>compctl -K</code> API instead because <code>dotnet complete</code> returns a raw newline-separated candidate list &mdash; perfectly shaped for <code>compctl</code>'s <code>reply</code>-array contract. Wiring that through <code>_describe</code> would add complexity for no behavioral gain.</p>
+        </div>
+        <div class="feature-card">
+          <h4>PATH append, not prepend</h4>
+          <p><code>$HOME/.dotnet/tools</code> gets appended (<code>$PATH:$HOME/.dotnet/tools</code>), not prepended. Means a stale dotnet-tool can never shadow <code>/usr/local/bin/foo</code> on hosts where both exist. If the user explicitly wants tool precedence, they can re-order in their <code>~/.zshrc</code> after sourcing.</p>
+        </div>
+        <div class="feature-card">
+          <h4>Guarded PATH</h4>
+          <p><code>[[ -d "$HOME/.dotnet/tools" ]]</code> wraps the <code>export</code>. On hosts without dotnet installed, the plugin is silent &mdash; no phantom PATH entry that slows down every command lookup. The guard is pinned by <code>t-plugin.zsh</code> so a refactor can't remove it accidentally.</p>
+        </div>
+        <div class="feature-card">
+          <h4>Three aliases, not thirty</h4>
+          <p>Only the three most-typed shortcuts get aliases (<code>dt</code> test, <code>dr</code> run, <code>dcl</code> clean). The plugin doesn't try to alias every <code>dotnet</code> subcommand &mdash; that would collide with users' own aliases and the user can always type the full subcommand with completion firing.</p>
+        </div>
+      </div>
+
+    </main>
+
+    <footer style="text-align:center;padding:2rem;font-size:10px;color:var(--text-muted);font-family:'Orbitron',sans-serif;letter-spacing:2px;">
+      ZSH-DOTNET-COMPLETION ENGINEERING REPORT &middot; 15 LOC &middot; 3 ALIASES &middot; 39 ZUNIT @TEST CASES &middot; 21 STRUCTURAL GATES &middot; <code>dotnet complete</code> SELF-HOSTED COMPLETER &middot; MENKETECHNOLOGIES
+    </footer>
+  </div>
+
+  <script>
+    const html = document.documentElement;
+    const btnTheme = document.getElementById('btnTheme');
+    const btnCrt = document.getElementById('btnCrt');
+    const btnNeon = document.getElementById('btnNeon');
+    const crtH = document.getElementById('crtH');
+    const crtV = document.getElementById('crtV');
+    btnTheme?.addEventListener('click', () => {
+      html.setAttribute('data-theme', html.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+    });
+    btnCrt?.addEventListener('click', () => {
+      btnCrt.classList.toggle('active');
+      const on = btnCrt.classList.contains('active');
+      if (crtH) crtH.style.display = on ? '' : 'none';
+      if (crtV) crtV.style.display = on ? '' : 'none';
+    });
+    btnNeon?.addEventListener('click', () => {
+      btnNeon.classList.toggle('active');
+      document.querySelector('.app')?.classList.toggle('neon-off');
+    });
+  </script>
+</body>
+</html>
