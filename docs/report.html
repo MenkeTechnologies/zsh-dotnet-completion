@@ -87,7 +87,7 @@
         <div class="stat-card"><div class="stat-val accent">39</div><div class="stat-label">zunit @test Cases</div></div>
         <div class="stat-card"><div class="stat-val green">21</div><div class="stat-label">Structural Gates (.sh)</div></div>
         <div class="stat-card"><div class="stat-val">7</div><div class="stat-label">zunit Files</div></div>
-        <div class="stat-card"><div class="stat-val">23</div><div class="stat-label">Git Commits</div></div>
+        <div class="stat-card"><div class="stat-val">27</div><div class="stat-label">Git Commits</div></div>
       </div>
 
       <hr class="section-rule">
@@ -112,6 +112,51 @@
           <tr class="total-row"><td>Total source</td><td class="num">15</td><td>One file, no completion-system <code>#compdef</code> file</td></tr>
         </tbody>
       </table>
+
+      <hr class="section-rule">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SECTION 2b: SOURCE WALKTHROUGH          -->
+      <!-- ═══════════════════════════════════════ -->
+      <h2 class="tutorial-title"><span class="step-hash">$</span>SOURCE WALKTHROUGH</h2>
+      <p class="tutorial-subtitle">The complete plugin, annotated. Nothing is elided &mdash; this is the entire 15-line file.</p>
+
+<pre># 1 — Guarded PATH append. Only runs if the global-tools dir
+#     exists, so the plugin is a no-op on hosts without the SDK.
+if [[ -d "$HOME/.dotnet/tools" ]]; then
+    export PATH="$PATH:$HOME/.dotnet/tools"   # append, never prepend
+fi
+
+# 2 — Completion callback. compctl passes the current command
+#     line in $words; dotnet complete returns the candidate list
+#     newline-separated. (ps:\n:) splits on \n into the reply array.
+_dotnet_zsh_complete() {
+  local completions=("$(dotnet complete "$words")")
+  reply=( "${(ps:\n:)completions}" )
+}
+
+# 3 — Three workflow aliases.
+alias dt='dotnet test'
+alias dcl='dotnet clean'
+alias dr='dotnet run'
+
+# 4 — Bind the callback to the dotnet command via legacy compctl.
+compctl -K _dotnet_zsh_complete dotnet</pre>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h4><code>$words</code> &rarr; <code>dotnet complete</code></h4>
+          <p><code>$words</code> is zsh's array of the current command line's words. Passed as a single double-quoted argument to <code>dotnet complete</code>, it becomes the command-line context the SDK completes against. The SDK reads the current directory's <code>.csproj</code> / <code>global.json</code>, so the candidate list is project-aware.</p>
+        </div>
+        <div class="feature-card">
+          <h4>The <code>(ps:\n:)</code> split</h4>
+          <p><code>dotnet complete</code> emits one candidate per line. <code>"${(ps:\n:)completions}"</code> uses zsh's <code>p</code> (recognize escape sequences) + <code>s:\n:</code> (split on the literal newline) parameter-expansion flags to turn that text into the array zsh's <code>reply</code> contract expects.</p>
+        </div>
+        <div class="feature-card">
+          <h4><code>local completions</code></h4>
+          <p>The intermediate array is function-local, so the callback leaves no global state behind beyond what <code>compctl</code> reads from <code>reply</code>. Pinned by <code>t-contract4.zsh</code> (no accidental global side effects).</p>
+        </div>
+      </div>
 
       <hr class="section-rule">
 
@@ -191,6 +236,35 @@
         <li><strong>.github/workflows/ gates (2):</strong> final newline, no tabs</li>
         <li><strong>cargo gate (1):</strong> vacuously passes &mdash; no Cargo.toml</li>
       </ul>
+
+      <hr class="section-rule">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SECTION 4b: INSTALL / INTEGRATION       -->
+      <!-- ═══════════════════════════════════════ -->
+      <h2 class="tutorial-title"><span class="step-hash">&gt;</span>INSTALL &amp; INTEGRATION</h2>
+      <p class="tutorial-subtitle">Three supported install paths. The plugin entrypoint stem matches the directory basename so Zinit / Oh My Zsh source-line copy-paste works unmodified &mdash; pinned by <code>t-contract.zsh</code>.</p>
+
+<pre># Zinit
+zinit ice lucid nocompile
+zinit load MenkeTechnologies/zsh-dotnet-completion
+
+# Oh My Zsh
+git clone https://github.com/MenkeTechnologies/zsh-dotnet-completion \
+    "$HOME/.oh-my-zsh/custom/plugins/zsh-dotnet-completion"
+# then add zsh-dotnet-completion to the plugins=() array
+
+# Manual
+git clone https://github.com/MenkeTechnologies/zsh-dotnet-completion
+source zsh-dotnet-completion/zsh-dotnet-completion.plugin.zsh</pre>
+
+      <p style="font-size:11.5px;color:var(--text-dim);line-height:1.6;">Verify after install:</p>
+      <ul style="font-size:11px;color:var(--text-dim);line-height:1.6;">
+        <li><code>compctl | grep dotnet</code> &mdash; the callback is bound to the <code>dotnet</code> command.</li>
+        <li><code>alias dt dr dcl</code> &mdash; the three workflow aliases are registered.</li>
+        <li><code>dotnet complete "dotnet "</code> &mdash; the SDK's completer responds (this is the data source the callback forwards).</li>
+      </ul>
+      <p style="font-size:11.5px;color:var(--text-dim);line-height:1.6;">See the <a href="index.html">Docs</a> page for usage examples, the PATH-augmentation rationale, and troubleshooting.</p>
 
       <hr class="section-rule">
 

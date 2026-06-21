@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <meta name="description" content="zsh-dotnet-completion — tab completion for the dotnet CLI, with sibling aliases for build / run / test / restore.">
+  <meta name="description" content="zsh-dotnet-completion — tab completion for the dotnet CLI via the official `dotnet complete` self-hosted completer, with three workflow aliases (dt=test / dr=run / dcl=clean) and a guarded $HOME/.dotnet/tools PATH append.">
   <title>zsh-dotnet-completion — Documentation</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -68,7 +68,21 @@
 
     <main class="tutorial-main">
       <h2 class="tutorial-title"><span class="step-hash">&gt;_</span>ZSH-DOTNET-COMPLETION</h2>
-      <p class="tutorial-subtitle"><strong>dotnet, completed.</strong> Tab completion for the <code>dotnet</code> command-line tool. Source the plugin, restart zsh, hit TAB after <code>dotnet</code>.</p>
+      <p class="tutorial-subtitle"><strong>dotnet, completed.</strong> Tab completion for the <code>dotnet</code> command-line tool. Source the plugin, restart zsh, hit TAB after <code>dotnet</code>. The plugin is 15 lines of zsh: it wires the SDK's own <code>dotnet complete</code> completer into zsh's legacy <code>compctl</code> system, registers three workflow aliases, and conditionally appends <code>$HOME/.dotnet/tools</code> to <code>$PATH</code>.</p>
+
+      <section class="tutorial-section">
+        <h2>Overview</h2>
+        <p>The .NET SDK ships its own completion engine. <code>dotnet complete "&lt;command line&gt;"</code> returns the candidate list for the current command line &mdash; subcommands, templates, NuGet packages, flag values &mdash; all computed by the SDK against the actual project in the current directory. This plugin does not maintain its own completion table; it forwards the SDK's output into zsh. The practical effect: every time you update the .NET SDK, completion updates with it. No plugin bump is needed when Microsoft adds a subcommand, a template, or a framework target.</p>
+        <p>The plugin uses zsh's legacy <code>compctl -K</code> callback binding rather than the modern <code>compsys</code> (<code>#compdef</code> / <code>_arguments</code>) framework, because <code>dotnet complete</code> returns a raw newline-separated candidate list that maps directly onto <code>compctl</code>'s <code>reply</code>-array contract.</p>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Requirements</h2>
+        <ul>
+          <li><strong>zsh</strong> &mdash; the plugin is sourced as a zsh startup file.</li>
+          <li><strong>.NET SDK</strong> &mdash; the <code>dotnet</code> CLI must be on <code>$PATH</code> and must support the <code>dotnet complete</code> subcommand (shipped by all modern SDK versions). Without <code>dotnet</code> installed, the completion callback returns nothing and the <code>$HOME/.dotnet/tools</code> PATH append is skipped (the directory won't exist).</li>
+        </ul>
+      </section>
 
       <section class="tutorial-section">
         <h2>Install</h2>
@@ -84,14 +98,73 @@ git clone https://github.com/MenkeTechnologies/zsh-dotnet-completion \
 # Manual
 git clone https://github.com/MenkeTechnologies/zsh-dotnet-completion
 source zsh-dotnet-completion/zsh-dotnet-completion.plugin.zsh</pre>
+        <p>After sourcing, start a new zsh session (or re-source your <code>~/.zshrc</code>) and press TAB after <code>dotnet</code>.</p>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>How it works</h2>
+        <p>The entire plugin is four surfaces in one file:</p>
+<pre># 1. Guarded PATH append — only if the tools dir exists
+if [[ -d "$HOME/.dotnet/tools" ]]; then
+    export PATH="$PATH:$HOME/.dotnet/tools"
+fi
+
+# 2. Completion callback — delegate to the SDK's own completer
+_dotnet_zsh_complete() {
+  local completions=("$(dotnet complete "$words")")
+  reply=( "${(ps:\n:)completions}" )
+}
+
+# 3. Workflow aliases
+alias dt='dotnet test'
+alias dcl='dotnet clean'
+alias dr='dotnet run'
+
+# 4. Bind the callback to the dotnet command
+compctl -K _dotnet_zsh_complete dotnet</pre>
+        <p><code>compctl -K _dotnet_zsh_complete dotnet</code> tells zsh to call <code>_dotnet_zsh_complete</code> whenever TAB is pressed on a <code>dotnet</code> command line. The callback runs <code>dotnet complete "$words"</code> (<code>$words</code> is the current command line as a single argument), then splits the newline-separated result into the <code>reply</code> array using zsh's <code>(ps:\n:)</code> parameter-expansion flag. zsh presents the <code>reply</code> entries as the completion menu.</p>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Aliases</h2>
+        <p>Three shortcuts for the most-typed developer-workflow subcommands. These are the only aliases the plugin registers &mdash; it does not try to shadow every <code>dotnet</code> subcommand.</p>
+        <table class="example-tbl">
+          <tr><td>dt</td><td><code>dotnet test</code></td></tr>
+          <tr><td>dr</td><td><code>dotnet run</code></td></tr>
+          <tr><td>dcl</td><td><code>dotnet clean</code></td></tr>
+        </table>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>PATH augmentation</h2>
+        <p><code>dotnet tool install --global &lt;tool&gt;</code> installs binaries into <code>$HOME/.dotnet/tools</code>. The plugin appends that directory to <code>$PATH</code> &mdash; but only if it exists (<code>[[ -d "$HOME/.dotnet/tools" ]]</code>), so on hosts without the SDK the plugin adds no phantom PATH entry. The directory is <em>appended</em>, not prepended (<code>$PATH:$HOME/.dotnet/tools</code>), so a global dotnet tool can never shadow a same-named binary earlier on <code>$PATH</code>. If you want tool precedence, re-order in <code>~/.zshrc</code> after sourcing the plugin.</p>
       </section>
 
       <section class="tutorial-section">
         <h2>Examples</h2>
-<pre>dotnet &lt;TAB&gt;           # subcommand completion: new, build, run, test, restore, ...
-dotnet new &lt;TAB&gt;       # template completion
-dotnet add &lt;TAB&gt;       # package completion
-dotnet build -c &lt;TAB&gt;  # configuration completion</pre>
+        <p>The candidate lists below come from the SDK's <code>dotnet complete</code> output, not from a table inside this plugin &mdash; the exact entries depend on your installed SDK version and the project in the current directory.</p>
+<pre>dotnet &lt;TAB&gt;           # subcommand completion: new, build, run, test, restore, add, ...
+dotnet new &lt;TAB&gt;       # template completion (console, classlib, web, webapi, ...)
+dotnet add &lt;TAB&gt;       # add subcommands; dotnet add package &lt;TAB&gt; queries NuGet sources
+dotnet build -c &lt;TAB&gt;  # configuration completion (Debug / Release)</pre>
+        <p>Alias usage:</p>
+<pre>dt          # runs: dotnet test
+dr          # runs: dotnet run
+dcl         # runs: dotnet clean</pre>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Troubleshooting</h2>
+        <ul>
+          <li><strong>No completions appear.</strong> Confirm the SDK supports the completer: <code>dotnet complete "dotnet "</code> should print a candidate list. If <code>dotnet</code> isn't on <code>$PATH</code>, the callback has nothing to call.</li>
+          <li><strong>Plugin not loaded.</strong> Verify the callback is bound: <code>compctl | grep dotnet</code> should show <code>_dotnet_zsh_complete</code>. If not, the plugin file wasn't sourced &mdash; start a fresh zsh session after install.</li>
+          <li><strong>Aliases missing.</strong> <code>alias dt dr dcl</code> should print the three expansions. Re-source the plugin if they're absent.</li>
+          <li><strong>Global tools not found.</strong> <code>$HOME/.dotnet/tools</code> is only added to <code>$PATH</code> if it exists when the plugin is sourced. Install a tool first (<code>dotnet tool install --global &lt;tool&gt;</code>), then start a new shell.</li>
+        </ul>
+      </section>
+
+      <section class="tutorial-section">
+        <p>For internals, the line-by-line plugin breakdown, the test matrix, and design tradeoffs, see the <a href="report.html">Engineering Report</a>.</p>
       </section>
 
       <section class="tutorial-section">
